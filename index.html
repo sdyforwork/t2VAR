@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>AR Ring Box - Final</title>
+  <title>AR Wedding Ring Box - Hiro Marker</title>
 
+  <!-- A-Frame & AR.js Libraries -->
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
 
@@ -26,7 +27,7 @@
       width: min(92vw, 520px);
       padding: 10px 14px;
       border-radius: 12px;
-      background: rgba(0, 0, 0, 0.68);
+      background: rgba(0, 0, 0, 0.75);
       color: white;
       text-align: center;
       font-size: 15px;
@@ -42,24 +43,26 @@
       z-index: 20;
       display: flex;
       justify-content: center;
-      gap: 10px;
+      gap: 12px;
       padding: 0 12px;
     }
 
     button {
-      min-width: 132px;
+      min-width: 140px;
       min-height: 48px;
       border: 0;
       border-radius: 12px;
-      padding: 10px 14px;
-      font-size: 16px;
+      padding: 10px 16px;
+      font-size: 15px;
       font-weight: 700;
       cursor: pointer;
       touch-action: manipulation;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      transition: all 0.2s ease;
     }
 
-    #run-button { background: #ffffff; color: #111111; }
-    #status-button { background: #ffd54f; color: #111111; }
+    #lid-button { background: #b71c1c; color: #ffffff; }
+    #sparkle-button { background: #ffd700; color: #111111; }
 
     .hint {
       display: block;
@@ -70,62 +73,85 @@
   </style>
 
   <script>
+    // Component สำหรับอนิเมชันเปิด/ปิดฝากล่อง
+    AFRAME.registerComponent('lid-animation', {
+      schema: {
+        open: { type: 'boolean', default: false }
+      },
+      init: function () {
+        this.currentAngle = 0;
+        this.targetAngle = 0;
+      },
+      update: function () {
+        // เมื่อเปิดฝา หมุนหมุนกลับหลัง -110 องศา
+        this.targetAngle = this.data.open ? -110 : 0;
+      },
+      tick: function (_time, deltaMs) {
+        if (!deltaMs) return;
+        if (Math.abs(this.currentAngle - this.targetAngle) > 0.1) {
+          // เลื่อนมุมหมุนแบบนุ่มนวล (Smooth interpolation)
+          this.currentAngle += (this.targetAngle - this.currentAngle) * 0.08;
+          this.el.setAttribute('rotation', `${this.currentAngle} 0 0`);
+        }
+      }
+    });
+
+    // Component สำหรับอนิเมชันเพชรหมุนและเปล่งประกาย
+    AFRAME.registerComponent('diamond-sparkle', {
+      schema: {
+        active: { type: 'boolean', default: false }
+      },
+      init: function () {
+        this.light = document.querySelector('#sparkle-light');
+      },
+      tick: function (_time, deltaMs) {
+        if (!deltaMs) return;
+        // หมุนเพชรเล็กน้อยตลอดเวลา
+        this.el.object3D.rotation.y += 0.01;
+
+        if (this.data.active) {
+          // เพิ่มเอฟเฟกต์แสงวิบวับ
+          const intensity = 1.5 + Math.sin(Date.now() * 0.008) * 0.8;
+          if (this.light) {
+            this.light.setAttribute('light', 'intensity', intensity);
+          }
+        } else {
+          if (this.light) {
+            this.light.setAttribute('light', 'intensity', 0);
+          }
+        }
+      }
+    });
+
     window.addEventListener('DOMContentLoaded', () => {
       const marker = document.querySelector('#hiro-marker');
-      const boxLid = document.querySelector('#box-lid');
+      const lidPivot = document.querySelector('#lid-pivot');
       const diamond = document.querySelector('#diamond');
       const topPanel = document.querySelector('#top-panel');
-      const runButton = document.querySelector('#run-button');
-      const statusButton = document.querySelector('#status-button');
+      const lidButton = document.querySelector('#lid-button');
+      const sparkleButton = document.querySelector('#sparkle-button');
 
-      let isOpen = true;
+      let isOpen = false;
       let isSparkling = false;
 
       marker.addEventListener('markerFound', () => {
-        topPanel.innerHTML = 'พบ Hiro Marker แล้ว — กล่องแหวนพร้อมใช้งาน<span class="hint">แตะปุ่มด้านล่างเพื่อทดลองควบคุม</span>';
+        topPanel.innerHTML = 'พบ Hiro Marker แล้ว — กล่องแหวนพร้อมใช้งาน<span class="hint">กดปุ่มด้านล่างเพื่อเปิดฝากล่องหรือเปิดประกายเพชร</span>';
       });
 
       marker.addEventListener('markerLost', () => {
-        topPanel.innerHTML = 'เล็งกล้องไปที่ Hiro Marker<span class="hint">วาง Marker บนโต๊ะที่มีแสงเพียงพอและให้เห็นกรอบดำครบทั้งสี่ด้าน</span>';
+        topPanel.innerHTML = 'เล็งกล้องไปที่ Hiro Marker<span class="hint">ส่องให้เห็นกล่องสีดำรอบ Marker สว่างชัดเจน</span>';
       });
 
-      // ปุ่มซ้าย: เปิด/ปิดกล่อง
-      runButton.addEventListener('click', () => {
+      lidButton.addEventListener('click', () => {
         isOpen = !isOpen;
-        // หมุนฝากล่องขึ้นด้านบน (แกน X) 120 องศา
-        const targetRotation = isOpen ? -120 : 0;
-        boxLid.setAttribute('animation', {
-          property: 'rotation',
-          to: `${targetRotation} 0 0`,
-          dur: 600,
-          easing: 'easeInOutQuad'
-        });
-        runButton.textContent = isOpen ? 'ปิดกล่อง' : 'เปิดกล่อง';
+        lidPivot.setAttribute('lid-animation', 'open', isOpen);
+        lidButton.textContent = isOpen ? 'ปิดฝากล่อง' : 'เปิดฝากล่อง';
       });
 
-      // ปุ่มขวา: ทำให้เพชรเปล่งประกาย
-      statusButton.addEventListener('click', () => {
+      sparkleButton.addEventListener('click', () => {
         isSparkling = !isSparkling;
-        
-        if (isSparkling) {
-          statusButton.textContent = 'หยุดเปล่งประกาย';
-          window.sparkleInterval = setInterval(() => {
-            const colors = ['#ffffff', '#fff59d', '#e1f5fe', '#fce4ec', '#ffeb3b'];
-            const randomColor = colors[Math.floor(Math.random() * colors.length)];
-            const randomOpacity = (Math.random() * 0.4 + 0.6).toFixed(2);
-            const randomScale = (Math.random() * 0.2 + 0.9).toFixed(2);
-            
-            diamond.setAttribute('color', randomColor);
-            diamond.setAttribute('material', 'opacity', randomOpacity);
-            diamond.setAttribute('scale', `${randomScale} ${randomScale} ${randomScale}`);
-          }, 70);
-        } else {
-          statusButton.textContent = 'เปล่งประกาย ✨';
-          clearInterval(window.sparkleInterval);
-          diamond.setAttribute('color', '#ffffff');
-          diamond.setAttribute('material', 'opacity', 1);
-          diamond.setAttribute('scale', '1 1 1');
-        }
+        diamond.setAttribute('diamond-sparkle', 'active', isSparkling);
+        sparkleButton.textContent = isSparkling ? 'ปิดประกายเพชร' : 'ประกายเพชร';
       });
     });
   </script>
@@ -134,12 +160,12 @@
 <body>
   <div id="top-panel">
     เล็งกล้องไปที่ Hiro Marker
-    <span class="hint">อนุญาตให้เว็บไซต์ใช้กล้องเมื่อเบราว์เซอร์ถาม</span>
+    <span class="hint">อนุญาตให้ใช้งานกล้องถ่ายรูปในเบราว์เซอร์</span>
   </div>
 
   <div id="controls">
-    <button id="run-button" type="button">ปิดกล่อง</button>
-    <button id="status-button" type="button">เปล่งประกาย ✨</button>
+    <button id="lid-button" type="button">เปิดฝากล่อง</button>
+    <button id="sparkle-button" type="button">ประกายเพชร</button>
   </div>
 
   <a-scene
@@ -157,119 +183,121 @@
       smooth-tolerance="0.01"
       smooth-threshold="3"
     >
-      <!-- ================= กล่องแหวน ================= -->
-      <!-- ใช้ scale 0.5 ให้พอดีกับ marker และวางบนพื้น marker -->
-      <a-entity position="0 0 0" scale="0.5 0.5 0.5">
-        
-        <!-- ฐานกล่องด้านล่าง (สีแดง) -->
-        <a-cylinder 
-          position="0 0.2 0" 
-          radius="1" 
-          height="0.4" 
-          color="#b71c1c" 
-          material="roughness: 0.9; metalness: 0.1"
-        ></a-cylinder>
-        
-        <!-- ฟูกบุด้านใน (สีขาว) -->
-        <a-cylinder 
-          position="0 0.42 0" 
-          radius="0.88" 
-          height="0.06" 
-          color="#ffffff" 
-          material="roughness: 1"
-        ></a-cylinder>
-        
-        <!-- ขอบกล่องด้านบน (สีแดงเข้ม) -->
-        <a-ring 
-          position="0 0.45 0" 
-          rotation="-90 0 0" 
-          radius-inner="0.88" 
-          radius-outer="1" 
-          color="#880e4f"
-        ></a-ring>
+      <!-- แสงไฟในฉาก -->
+      <a-entity light="type: ambient; color: #ffffff; intensity: 0.9"></a-entity>
+      <a-entity light="type: directional; color: #ffffff; intensity: 1.2" position="1 4 2"></a-entity>
+      <a-entity id="sparkle-light" light="type: point; color: #e0f7fa; intensity: 0; distance: 2" position="0 0.6 0"></a-entity>
 
-        <!-- ================= ฝากล่อง (Hinged Lid) ================= -->
-        <!-- จุดหมุนอยู่ที่ขอบหลังของกล่อง (Z = -1) และหมุนรอบแกน X -->
-        <a-entity id="box-lid" position="0 0.45 -1" rotation="0 0 0">
-          <!-- ตัวฝากล่อง -->
-          <a-cylinder 
-            position="0 0.2 1" 
-            radius="1" 
-            height="0.4" 
-            color="#b71c1c" 
-            material="roughness: 0.9; metalness: 0.1"
-          ></a-cylinder>
-          <!-- ฟูกบุฝาด้านใน -->
-          <a-cylinder 
-            position="0 0.05 1" 
-            radius="0.88" 
-            height="0.06" 
-            color="#ffffff" 
-            material="roughness: 1"
-          ></a-cylinder>
-          <!-- ขอบฝากล่อง -->
-          <a-ring 
-            position="0 0 1" 
-            rotation="-90 0 0" 
-            radius-inner="0.88" 
-            radius-outer="1" 
-            color="#880e4f"
-          ></a-ring>
-        </a-entity>
+      <!-- กลุ่มกล่องแหวนทั้งหมด -->
+      <a-entity position="0 0 0" scale="1.5 1.5 1.5">
 
-        <!-- ================= แหวนเพชร ================= -->
-        <!-- วางแหวนบนฟูกตรงกลางกล่อง -->
-        <a-entity id="ring-group" position="0 0.5 0" rotation="-90 0 0">
-          <!-- ตัวแหวน (Torus) -->
-          <a-torus 
-            radius="0.32" 
-            radius-tubular="0.05" 
-            color="#f5f5f5" 
-            material="metalness: 1; roughness: 0.05"
+        <!-- 1. ตัวกล่องล่าง (สีแดงทรงสี่เหลี่ยม) -->
+        <a-box
+          position="0 0.15 0"
+          width="0.5"
+          height="0.3"
+          depth="0.5"
+          color="#8b0000"
+          roughness="0.3"
+          metalness="0.1"
+        ></a-box>
+
+        <!-- ขอบสีทองของตัวกล่องล่าง -->
+        <a-box position="0 0.3 0" width="0.51" height="0.01" depth="0.51" color="#d4af37" metalness="0.8" roughness="0.2"></a-box>
+
+        <!-- 2. ฟูกด้านในสีขาว (Inner Cushion) -->
+        <a-box
+          position="0 0.22 0"
+          width="0.44"
+          height="0.15"
+          depth="0.44"
+          color="#f8f9fa"
+          roughness="0.9"
+        ></a-box>
+        <!-- รอยผ่าฟูกแหวน -->
+        <a-box position="0 0.295 0" width="0.22" height="0.005" depth="0.04" color="#d1d5db"></a-box>
+
+        <!-- 3. แหวนทอง + เพชร (Gold Ring + Diamond) -->
+        <a-entity position="0 0.32 0" rotation="0 45 0">
+          <!-- ตัววงแหวนทอง (Gold Band) -->
+          <a-torus
+            radius="0.065"
+            radius-tubular="0.012"
+            segments-tubular="32"
+            segments-radial="16"
+            rotation="90 0 0"
+            color="#ffd700"
+            metalness="0.9"
+            roughness="0.15"
           ></a-torus>
-          
-          <!-- ตัวเรือนแหวน (Base) -->
-          <a-box 
-            position="0 0.32 0" 
-            width="0.1" 
-            height="0.15" 
-            depth="0.1" 
-            color="#f5f5f5" 
-            material="metalness: 1"
-          ></a-box>
-          
-          <!-- เพชร (สร้างจาก Cone 2 อันประกบกัน) -->
-          <a-entity id="diamond" position="0 0.42 0">
-            <!-- ยอดเพชร (หงาย) -->
-            <a-cone 
-              position="0 0.1 0" 
-              radius-bottom="0.09" 
-              radius-top="0" 
-              height="0.12" 
-              color="#ffffff" 
-              material="metalness: 0.9; roughness: 0.05; opacity: 0.95; transparent: true"
+
+          <!-- ฐานชูเพชร (Prongs) -->
+          <a-cone
+            position="0 0.065 0"
+            radius-bottom="0.01"
+            radius-top="0.025"
+            height="0.025"
+            color="#e5e7eb"
+            metalness="0.9"
+            roughness="0.1"
+          ></a-cone>
+
+          <!-- หัวเพชร (Diamond Geometry) -->
+          <a-entity id="diamond" position="0 0.09 0" diamond-sparkle="active: false">
+            <!-- ส่วนบนของเพชร -->
+            <a-cone
+              position="0 0.012 0"
+              radius-bottom="0.032"
+              radius-top="0.018"
+              height="0.02"
+              segments-radial="8"
+              color="#ffffff"
+              material="opacity: 0.9; transparent: true; roughness: 0; metalness: 0.1; emissive: #ffffff; emissiveIntensity: 0.2"
             ></a-cone>
-            <!-- ฐานเพชร (คว่ำ) -->
-            <a-cone 
-              position="0 -0.02 0" 
-              rotation="180 0 0" 
-              radius-bottom="0.09" 
-              radius-top="0.02" 
-              height="0.12" 
-              color="#ffffff" 
-              material="metalness: 0.9; roughness: 0.05; opacity: 0.95; transparent: true"
+            <!-- ส่วนล่างของเพชร (ก้นแหลม) -->
+            <a-cone
+              position="0 -0.01 0"
+              rotation="180 0 0"
+              radius-bottom="0.032"
+              radius-top="0"
+              height="0.025"
+              segments-radial="8"
+              color="#ffffff"
+              material="opacity: 0.9; transparent: true; roughness: 0; metalness: 0.1; emissive: #ffffff; emissiveIntensity: 0.2"
             ></a-cone>
           </a-entity>
         </a-entity>
-      </a-entity>
 
-      <!-- แสงเพิ่มเติมเพื่อให้เพชรเปล่งประกาย -->
-      <a-entity light="type: point; color: #ffffff; intensity: 2" position="0 1.5 1"></a-entity>
+        <!-- 4. ฝากล่องพร้อมจุดหมุน (Pivot Lid) -->
+        <a-entity id="lid-pivot" position="0 0.3 -0.25" lid-animation="open: false">
+          <!-- ตัวฝากล่องสีแดง -->
+          <a-box
+            position="0 0.15 0.25"
+            width="0.51"
+            height="0.3"
+            depth="0.51"
+            color="#8b0000"
+            roughness="0.3"
+            metalness="0.1"
+          ></a-box>
+          <!-- บุผ้าสีขาวด้านในฝา -->
+          <a-box
+            position="0 0.002 0.25"
+            width="0.48"
+            height="0.005"
+            depth="0.48"
+            color="#f8f9fa"
+            roughness="0.8"
+          ></a-box>
+          <!-- ขอบสีทองฝากล่อง -->
+          <a-box position="0 -0.001 0.25" width="0.52" height="0.01" depth="0.52" color="#d4af37" metalness="0.8" roughness="0.2"></a-box>
+        </a-entity>
+
+      </a-entity>
     </a-marker>
 
+    <!-- กล้องถ่ายรูป -->
     <a-entity camera></a-entity>
-    <a-entity light="type: ambient; color: #BBB"></a-entity>
-    <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-1 2 1"></a-entity>
   </a-scene>
 </body>
 </html>
