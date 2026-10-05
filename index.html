@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Red Ring Box</title>
+    <!-- นำเข้า A-Frame และ AR.js -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
+    <style>
+        /* ตกแต่งปุ่มควบคุมให้ลอยอยู่ด้านล่างของหน้าจอ */
+        #ui-container {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            gap: 15px;
+            font-family: sans-serif;
+        }
+        .ar-btn {
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: all 0.2s ease;
+        }
+        .ar-btn:active { transform: scale(0.95); }
+        #btn-open { background-color: #d32f2f; } /* สีแดง */
+        #btn-sparkle { background-color: #fbc02d; color: #333; } /* สีทอง */
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+
+    <!-- ส่วนควบคุม UI (ปุ่มกด) -->
+    <div id="ui-container">
+        <button id="btn-open" class="ar-btn">เปิด/ปิด กล่อง</button>
+        <button id="btn-sparkle" class="ar-btn">เปล่งประกาย ✨</button>
+    </div>
+
+    <!-- ฉาก AR -->
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" renderer="logarithmicDepthBuffer: true;">
+        
+        <!-- Marker Hiro -->
+        <a-marker preset="hiro">
+            
+            <!-- กลุ่มวัตถุทั้งหมด (จัดวางให้อยู่เหนือ marker) -->
+            <a-entity position="0 0 0" scale="0.5 0.5 0.5">
+                
+                <!-- 1. ฐานกล่องแหวน (สีแดง) -->
+                <a-cylinder position="0 0.1 0" radius="0.8" height="0.2" color="#b71c1c" material="roughness: 0.8"></a-cylinder>
+                
+                <!-- 2. ฟูกบุด้านใน (สีขาว) -->
+                <a-cylinder position="0 0.21 0" radius="0.7" height="0.05" color="#ffffff" material="roughness: 1"></a-cylinder>
+                
+                <!-- 3. ฝากล่อง (hinged) - ใช้ Pivot point เพื่อให้หมุนเปิดได้ -->
+                <a-entity id="box-lid" position="-0.8 0.2 0" rotation="0 0 0">
+                    <!-- ตัวฝากล่อง เลื่อนตำแหน่งให้ห่างจากจุดหมุน -->
+                    <a-cylinder position="0.8 0.1 0" radius="0.8" height="0.2" color="#b71c1c" material="roughness: 0.8"></a-cylinder>
+                    <!-- ฟูกบุฝาด้านใน -->
+                    <a-cylinder position="0.8 0.05 0" radius="0.7" height="0.05" color="#ffffff" material="roughness: 1"></a-cylinder>
+                </a-entity>
+
+                <!-- 4. แหวนเพชร -->
+                <a-entity position="0 0.25 0" rotation="-90 0 0">
+                    <!-- ตัวแหวน (Torus) -->
+                    <a-torus radius="0.25" radius-tubular="0.03" color="#e0e0e0" material="metalness: 1; roughness: 0.1"></a-torus>
+                    
+                    <!-- ตัวเรือนแหวน -->
+                    <a-box position="0 0.25 0" width="0.08" height="0.1" depth="0.08" color="#e0e0e0" material="metalness: 1"></a-box>
+                    
+                    <!-- เพชร (ทรง Octahedron) -->
+                    <a-octahedron id="diamond" position="0 0.32 0" radius="0.1" color="#ffffff" material="metalness: 0.9; roughness: 0.1; opacity: 0.9; transparent: true;"></a-octahedron>
+                </a-entity>
+
+            </a-entity>
+        </a-marker>
+
+        <!-- กล้องและแสง -->
+        <a-entity camera></a-entity>
+        <a-entity light="type: ambient; color: #BBB"></a-entity>
+        <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-1 2 1"></a-entity>
+    </a-scene>
+
+    <!-- ลอจิกการทำงานของปุ่ม (JavaScript) -->
+    <script>
+        // สถานะของกล่อง (ปิด = false, เปิด = true)
+        let isBoxOpen = false;
+        let isSparkling = false;
+        let sparkleInterval;
+
+        // อ้างอิง DOM ของ A-Frame
+        const boxLid = document.querySelector('#box-lid');
+        const diamond = document.querySelector('#diamond');
+        const btnOpen = document.querySelector('#btn-open');
+        const btnSparkle = document.querySelector('#btn-sparkle');
+
+        // ฟังก์ชันเปิด-ปิดกล่อง
+        btnOpen.addEventListener('click', () => {
+            isBoxOpen = !isBoxOpen;
+            // ถ้าเปิด ให้หมุนฝาไปด้านหลัง 120 องศา (แกน Z)
+            // ถ้าปิด ให้หมุนกลับมา 0 องศา
+            const targetRotation = isBoxOpen ? -120 : 0;
+            
+            // ใช้ A-Frame Animation สำหรับการหมุนที่สมูท
+            boxLid.setAttribute('animation', {
+                property: 'rotation',
+                to: `0 0 ${targetRotation}`,
+                dur: 500,
+                easing: 'easeInOutQuad'
+            });
+        });
+
+        // ฟังก์ชันทำให้เพชรเปล่งประกาย
+        btnSparkle.addEventListener('click', () => {
+            isSparkling = !isSparkling;
+            
+            if (isSparkling) {
+                btnSparkle.textContent = 'หยุดเปล่งประกาย 🛑';
+                // สร้าง Interval เพื่อสลับสีและความโปร่งแสงให้ดูเหมือนกะพริบ
+                sparkleInterval = setInterval(() => {
+                    const randomColor = Math.random() > 0.5 ? '#ffffff' : '#fff59d'; // ขาว หรือ เหลืองอ่อน
+                    const randomOpacity = (Math.random() * 0.5 + 0.5).toFixed(2); // 0.5 - 1.0
+                    
+                    diamond.setAttribute('color', randomColor);
+                    diamond.setAttribute('material', 'opacity', randomOpacity);
+                    
+                    // สุ่มสเกลเล็กน้อยให้ดูเหมือนสะท้อนแสง
+                    const scale = (Math.random() * 0.2 + 0.9).toFixed(2);
+                    diamond.setAttribute('scale', `${scale} ${scale} ${scale}`);
+                }, 100); // ทำงานทุกๆ 100ms
+            } else {
+                btnSparkle.textContent = 'เปล่งประกาย ✨';
+                clearInterval(sparkleInterval);
+                // คืนค่าเพชรกลับสู่ปกติ
+                diamond.setAttribute('color', '#ffffff');
+                diamond.setAttribute('material', 'opacity', 0.9);
+                diamond.setAttribute('scale', '1 1 1');
+            }
+        });
+    </script>
+</body>
+</html>
